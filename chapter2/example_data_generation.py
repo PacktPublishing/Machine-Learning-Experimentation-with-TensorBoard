@@ -65,30 +65,9 @@ imshow(content_image, 'Content Image')
 plt.subplot(1, 2, 2)
 imshow(style_image, 'Style Image')
 
-
-
-import tensorflow_hub as hub
-hub_model = hub.load('https://tfhub.dev/google/magenta/arbitrary-image-stylization-v1-256/2')
-stylized_image = hub_model(tf.constant(content_image), tf.constant(style_image))[0]
-tensor_to_image(stylized_image)
-
-x = tf.keras.applications.vgg19.preprocess_input(content_image*255)
-x = tf.image.resize(x, (224, 224))
-vgg = tf.keras.applications.VGG19(include_top=True, weights='imagenet')
-
-
-prediction_probabilities = vgg(x)
-prediction_probabilities.shape
-
-predicted_top_5 = tf.keras.applications.vgg19.decode_predictions(prediction_probabilities.numpy())[0]
-[(class_name, prob) for (number, class_name, prob) in predicted_top_5]
 vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
-
-for layer in vgg.layers:
- print(layer.name)
-
+vgg.trainable = False
 content_layers = ['block5_conv2']
-
 style_layers = ['block1_conv1',
                'block2_conv1',
                'block3_conv1',
@@ -101,10 +80,7 @@ num_style_layers = len(style_layers)
 def vgg_layers(layer_names):
  """ Creates a vgg model that returns a list of intermediate output values."""
  # Load our model. Load pretrained VGG, trained on imagenet data
- vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
- vgg.trainable = False
-  outputs = [vgg.get_layer(name).output for name in layer_names]
-
+ outputs = [vgg.get_layer(name).output for name in layer_names]
  model = tf.keras.Model([vgg.input], outputs)
  return model
 
@@ -118,11 +94,11 @@ def gram_matrix(input_tensor):
  num_locations = tf.cast(input_shape[1]*input_shape[2], tf.float32)
  return result/(num_locations)
 
-
-file_writer_style.set_as_default()
-
 def log_stylized_image(epoch, img):
  tf.summary.image("Stylized Image", np.expand_dims(np.array(img), axis=0), step=epoch)
+
+
+file_writer_style.set_as_default()
 
 
 
@@ -159,21 +135,13 @@ extractor = StyleContentModel(style_layers, content_layers)
 
 results = extractor(tf.constant(content_image))
 
-
-image = tf.Variable(content_image)
-
-
 def clip_0_1(image):
  return tf.clip_by_value(image, clip_value_min=0.0, clip_value_max=1.0)
 
-
+image = tf.Variable(content_image)
 opt = tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
-
-
 style_weight=1e-2
 content_weight=1e4
-
-
 
 
 def style_content_loss(outputs):
@@ -202,7 +170,6 @@ def train_step(image):
 
 
 import time
-
 start = time.time()
 
 epochs = 10
