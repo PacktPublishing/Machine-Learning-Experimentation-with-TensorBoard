@@ -1,21 +1,26 @@
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 import numpy as np
-from sklearn import model_selection
-from shutil import move as mv
+import tensorflow_datasets as tfds
 
+(ds_train, ds_test), ds_info = tfds.load('HorsesOrHumans', split=['train', 'test'], with_info=True, as_supervised=True, shuffle_files=True)
 
-!wget --no-check-certificate \
-https://storage.googleapis.com/laurencemoroney-blog.appspot.com/horse-or-human.zip \
-    -O /tmp/horse-or-human.zip
-import os
-import zipfile
+def normalize_img(image, label):
+  """Normalizes images: `uint8` -> `float32`."""
+  return tf.cast(image, tf.float32) / 255., label
 
-local_zip = '/tmp/horse-or-human.zip'
-zip_ref = zipfile.ZipFile(local_zip, 'r')
-zip_ref.extractall('/tmp/horse-or-human')
-zip_ref.close()
+ds_train = ds_train.map(
+    normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.cache()
+ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)
+ds_train = ds_train.batch(128)
+ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
+ds_test = ds_test.map(
+    normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_test = ds_test.cache()
+ds_test = ds_test.batch(128)
+ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
 
 dropout_hp = hp.HParam('dropout', hp.RealInterval(0.5, 0.7))
 opimizer_hp = hp.HParam('optimizer', hp.Discrete(['sgd', 'adam']))
@@ -64,18 +69,11 @@ def hp_model(hparams):
       metrics=['accuracy']
     )
 
-    train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1/255)
-    train_generator = train_datagen.flow_from_directory(
-        '/tmp/horse-or-human/',
-        target_size = (300,300),
-        batch_size = 128,
-        class_mode = 'binary'
-    )
-    model.fit(
-        train_generator,
+    model.fit(
+        ds_train,
         epochs = 1
     )
-    _, acc = model.evaluate(train_generator)
+    _, acc = model.evaluate(ds_test)
     print(acc)
     return acc
 
@@ -96,5 +94,3 @@ for dropout in (dropout_hp.domain.min_value, dropout_hp.domain.max_value):
         }
         run_hp('logs/hp_tuning/' + str(sess), hparams)
         sess = sess + 1
-
-
