@@ -1,26 +1,28 @@
-!pip install -U tensorboard_plugin_profile
 import tensorflow as tf
 import numpy as np
-from sklearn import model_selection
-from shutil import move as mv
+import tensorflow_datasets as tfds
 
+(ds_train, ds_test), ds_info = tfds.load('HorsesOrHumans', split=['train', 'test'], with_info=True, as_supervised=True, shuffle_files=True)
 
-!wget --no-check-certificate \
-    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/horse-or-human.zip \
-    -O /tmp/horse-or-human.zip
+def normalize_img(image, label):
+  """Normalizes images: `uint8` -> `float32`."""
+  return tf.cast(image, tf.float32) / 255., label
 
-import os
-import zipfile
+ds_train = ds_train.map(
+    normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.cache()
+ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)
+ds_train = ds_train.batch(128)
+ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-local_zip = '/tmp/horse-or-human.zip'
-zip_ref = zipfile.ZipFile(local_zip, 'r')
-zip_ref.extractall('/tmp/horse-or-human')
-zip_ref.close()
-
+ds_test = ds_test.map(
+    normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_test = ds_test.cache()
+ds_test = ds_test.batch(128)
+ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
 
 
 log_dir = "logs/profiler"
-
 callback_func = tf.keras.callbacks.TensorBoard(log_dir = log_dir,
                                                  histogram_freq = 1,
                                                 profile_batch = '500,520',)
@@ -55,17 +57,7 @@ model.compile(
     metrics=['accuracy']
 )
 
-
-train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1/255)
-train_generator = train_datagen.flow_from_directory(
-    '/tmp/horse-or-human/',
-    target_size = (300,300),
-    batch_size = 128,
-    class_mode = 'binary'
-)
-
-
-model.fit(train_generator,
+model.fit(ds_train,
           epochs=2,
           validation_data=train_generator,
           callbacks = [callback_func])
