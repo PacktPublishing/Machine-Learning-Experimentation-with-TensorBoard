@@ -59,7 +59,7 @@ model.compile(
 
 model.fit(ds_train,
           epochs=2,
-          validation_data=train_generator,
+          validation_data=ds_test,
           callbacks = [callback_func])
 
 
